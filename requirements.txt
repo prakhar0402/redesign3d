@@ -1,0 +1,12 @@
+CGAL
+armadillo
+
+
+
+armadillo requires:
+BLAS, LAPACK
+ - Download .lib and .dll for win32 BLAS and LAPACK from http://icl.cs.utk.edu/lapack-for-windows/lapack/
+ - Install MinGW (had to install two versions, not sure if both are required), https://sourceforge.net/projects/mingw-w64/
+ - Add <mingw>/bin to system PATH
+ - Add BLAS and LAPACK lib directory and lib files to linker in project properties
+ - Add BLAS and LAPACK dll to the same directory as the project executable
