@@ -22,12 +22,11 @@ public:
 	VertexMemo(Polyhedron::Vertex_const_handle vertex);
 	VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 vertex_normal, double dia);
 	void set_normal(Kernel::Vector_3 vertex_normal);
+	void set_velocity(const arma::vec& vel);
 	void set_sdf(double dia);
-	void compute_force(const double& K_sdf, const double& threshold_dia, boost::associative_property_map<he_memo_map>& Halfedge_memo_map);
+	void compute_sdf_force(const double& K_sdf, const double& threshold_dia);
 	arma::vec get_velocity();
-	arma::vec get_force();
-	arma::mat get_Jacobian_pos();
-	arma::mat get_Jacobian_vel();
+	arma::vec get_sdf_force();
 	size_t index;
 
 private:
@@ -35,9 +34,7 @@ private:
 	arma::vec normal;
 	arma::vec velocity;
 	double sdf;
-	arma::vec force;
-	arma::mat Jpos;
-	arma::mat Jvel;
+	arma::vec sdf_force;
 };
 
 #endif

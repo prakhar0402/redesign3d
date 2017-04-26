@@ -3,8 +3,10 @@
 HalfedgeMemo::HalfedgeMemo()
 {
 	he = NULL;
+	isMaster = 0;
 	initial_length = 0.0;
 	current_length = initial_length;
+	force.set_size(3);
 	Jpos.set_size(3, 3);
 	Jvel.set_size(3, 3);
 	force.fill(0.0);
@@ -15,8 +17,10 @@ HalfedgeMemo::HalfedgeMemo()
 HalfedgeMemo::HalfedgeMemo(Polyhedron::Halfedge_const_handle halfedge)
 {
 	he = halfedge;
+	isMaster = 0;
 	initial_length = compute_length();
 	current_length = initial_length;
+	force.set_size(3);
 	Jpos.set_size(3, 3);
 	Jvel.set_size(3, 3);
 	force.fill(0.0);
@@ -26,12 +30,11 @@ HalfedgeMemo::HalfedgeMemo(Polyhedron::Halfedge_const_handle halfedge)
 
 double HalfedgeMemo::compute_length()
 {
-	double dist = 0.0;
 	if (he != NULL)
 	{
-		dist = CGAL::sqrt(CGAL::squared_distance(he->vertex()->point(), he->opposite()->vertex()->point()));
+		current_length = CGAL::sqrt(CGAL::squared_distance(he->vertex()->point(), he->opposite()->vertex()->point()));
 	}
-	return dist;
+	return current_length;
 }
 
 double HalfedgeMemo::get_current_length()
@@ -61,19 +64,6 @@ void HalfedgeMemo::compute_force(const double& K_s, const double& K_d, const arm
 	Jpos.diag() -= coef1;
 
 	Jvel.diag() -= K_d;
-
-	//Jpos(1, 1) = -K_s + coef*(mv12(2, 2) + mv12(3, 3));
-	//Jpos(1, 2) = -coef*v12(1)*v12(2);
-	//Jpos(1, 3) = -coef*v12(1)*v12(3);
-
-	//Jpos(2, 1) = -K_s + coef*(mv12(2, 2) + mv12(3, 3));
-	//Jpos(2, 2) = -coef*v12(1)*v12(2);
-	//Jpos(2, 3) = -coef*v12(1)*v12(3);
-
-	//Jpos(3, 1) = -K_s + coef*(mv12(2, 2) + mv12(3, 3));
-	//Jpos(3, 2) = -coef*v12(1)*v12(2);
-	//Jpos(3, 3) = -coef*v12(1)*v12(3);
-	
 }
 
 arma::vec HalfedgeMemo::get_force()

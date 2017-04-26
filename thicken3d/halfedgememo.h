@@ -22,6 +22,7 @@ public:
 	arma::vec get_force();
 	arma::mat get_Jacobian_pos();
 	arma::mat get_Jacobian_vel();
+	int isMaster; // 1 if master, -1 if slave, 0 if not known
 
 private:
 	Polyhedron::Halfedge_const_handle he;
