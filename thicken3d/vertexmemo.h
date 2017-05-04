@@ -20,20 +20,25 @@ class VertexMemo
 public:
 	VertexMemo();
 	VertexMemo(Polyhedron::Vertex_const_handle vertex);
-	VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 vertex_normal, double dia);
+	VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 vertex_normal, double dia, double area_value);
 	void set_normal(Kernel::Vector_3 vertex_normal);
 	void set_velocity(const arma::vec& vel);
 	void set_sdf(double dia);
+	void set_area(double value);
 	void compute_sdf_force(const double& K_sdf, const double& threshold_dia);
+	double get_sdf();
+	double get_area();
+	arma::vec get_normal();
 	arma::vec get_velocity();
 	arma::vec get_sdf_force();
 	size_t index;
 
 private:
 	Polyhedron::Vertex_const_handle v;
-	arma::vec normal;
+	arma::vec normal; // vertex normal
 	arma::vec velocity;
 	double sdf;
+	double area; // sum of projected area of all faces around the vertex
 	arma::vec sdf_force;
 };
 
