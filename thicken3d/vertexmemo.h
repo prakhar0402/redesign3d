@@ -23,8 +23,10 @@ public:
 	VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 vertex_normal, double dia, double area_value);
 	void set_normal(Kernel::Vector_3 vertex_normal);
 	void set_velocity(const arma::vec& vel);
+	void set_ref_point(Kernel::Point_3 ref);
 	void set_sdf(double dia);
 	void set_area(double value);
+	double compute_length();
 	void compute_sdf_force(const double& K_sdf, const double& threshold_dia);
 	double get_sdf();
 	double get_area();
@@ -32,14 +34,24 @@ public:
 	arma::vec get_velocity();
 	arma::vec get_sdf_force();
 	size_t index;
+	void compute_force(const double& K_sdf, const double& K_s, const double& K_d, const double& threshold_dia);
+	arma::vec get_force();
+	arma::mat get_Jacobian_pos();
+	arma::mat get_Jacobian_vel();
 
 private:
 	Polyhedron::Vertex_const_handle v;
 	arma::vec normal; // vertex normal
 	arma::vec velocity;
+	Kernel::Point_3 ref_point;
+	double initial_length;
+	double current_length;
 	double sdf;
 	double area; // sum of projected area of all faces around the vertex
 	arma::vec sdf_force;
+	arma::vec force;
+	arma::mat Jpos;
+	arma::mat Jvel;
 };
 
 #endif

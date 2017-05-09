@@ -31,9 +31,8 @@ HalfedgeMemo::HalfedgeMemo(Polyhedron::Halfedge_const_handle halfedge)
 double HalfedgeMemo::compute_length()
 {
 	if (he != NULL)
-	{
 		current_length = CGAL::sqrt(CGAL::squared_distance(he->vertex()->point(), he->opposite()->vertex()->point()));
-	}
+
 	return current_length;
 }
 
@@ -44,6 +43,8 @@ double HalfedgeMemo::get_current_length()
 
 void HalfedgeMemo::compute_force(const double& K_s, const double& K_d, const arma::vec& vel1, const arma::vec& vel2)
 {
+	compute_length();
+
 	Polyhedron::Vertex_const_handle v1, v2;
 	v1 = he->vertex();
 	v2 = he->opposite()->vertex();
