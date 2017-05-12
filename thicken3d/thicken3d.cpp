@@ -35,13 +35,16 @@ typedef Kernel::Vector_3 Vector;
 typedef boost::graph_traits<Polyhedron> GraphTraits;
 typedef GraphTraits::vertex_descriptor vertex_descriptor;
 
-const std::string FILENAME = "data/cactus.off";
-const std::string IDENTIFIER = "0000";
+const std::string FILENAME = "data/cactus/cactus.off";
+//const std::string FILENAME = "data/part2_thins_uni/part2_thins_uni.off";
+const std::string IDENTIFIER = "0011";
 
 const double T1 = 0.1;
-const double T2 = 0.15;
+const double T2 = 0.15; // 1.5*T1
+//const double T1 = 3.5;
+//const double T2 = 7; // 1.5*T1
 
-const double K_SDF = 2048.0;
+const double K_SDF = 8.0;
 const double K_S = 128.0;
 const double K_D = 64.0;
 
@@ -49,7 +52,7 @@ const double VERTEX_MASS = 1.0;
 const double MASS_INV = 1.0 / VERTEX_MASS;
 
 const double TIME_STEP = 1.0;
-const double TOTAL_TIME = 0.0;
+const double TOTAL_TIME = 50.0;
 const size_t STEPS = (size_t)std::ceil(TOTAL_TIME / TIME_STEP);
 
 std::pair<double, double> min_max_sdf;
@@ -58,6 +61,7 @@ size_t nMove;
 
 arma::vec max_change_vec(STEPS);
 
+// creates an output file with all the necessary parameters and output values
 void generateOutput(
 	const std::string filename,
 	const Polyhedron& mesh,
@@ -147,7 +151,8 @@ void populate_halfedge_memos(
 size_t populate_memos(
 	const Polyhedron& mesh,
 	boost::associative_property_map<v_memo_map>& Vertex_memo_map,
-	boost::associative_property_map<he_memo_map>& Halfedge_memo_map
+	boost::associative_property_map<he_memo_map>& Halfedge_memo_map,
+	bool SDFexists = false
 )
 {
 	// computing vertex normals
@@ -167,18 +172,48 @@ size_t populate_memos(
 	Facet_double_map fdm;
 	boost::associative_property_map<Facet_double_map> sdf_property_map(fdm);
 
-	// compute SDF values
-	// std::pair<double, double> min_max_sdf = CGAL::sdf_values(mesh, sdf_property_map);
+	// use pre-existing face sdf values if already computed before
+	std::string face_sdf_file = FILENAME.substr(0, FILENAME.size() - 4) + ".facesdf";
+	std::ifstream ifile(face_sdf_file);
+	if (SDFexists && ifile.good()) // if the file exists and can be read
+	{
+		// read face sdf values from the file
+		ifile >> min_max_sdf.first;
+		ifile >> min_max_sdf.second;
+		double val;
+		for (Polyhedron::Facet_const_iterator fi = mesh.facets_begin(); fi != mesh.facets_end(); ++fi)
+		{
+			ifile >> val;
+			boost::put(sdf_property_map, fi, val);
+		}
+	}
+	else // if file doesn't exist or can't be read, compute face sdf values and write to file
+	{
+		ifile.close();
 
-	// It is possible to compute the raw SDF values and post-process them using
-	// the following lines:
-	const std::size_t number_of_rays = 25;  // cast 25 rays per facet
-	const double cone_angle = 2.0 / 3.0 * CGAL_PI; // set cone opening-angle
-	CGAL::sdf_values(mesh, sdf_property_map, cone_angle, number_of_rays, false);
-	min_max_sdf = CGAL::sdf_values_postprocessing(mesh, sdf_property_map);
+		// compute SDF values
+		// std::pair<double, double> min_max_sdf = CGAL::sdf_values(mesh, sdf_property_map);
 
-	// print minimum & maximum SDF values
-	std::cout << "minimum SDF: " << min_max_sdf.first	<< " maximum SDF: " << min_max_sdf.second << std::endl;
+		// It is possible to compute the raw SDF values and post-process them using
+		// the following lines:
+		const std::size_t number_of_rays = 25;  // cast 25 rays per facet
+		const double cone_angle = 2.0 / 3.0 * CGAL_PI; // set cone opening-angle
+		CGAL::sdf_values(mesh, sdf_property_map, cone_angle, number_of_rays, false);
+		min_max_sdf = CGAL::sdf_values_postprocessing(mesh, sdf_property_map);
+
+		// print minimum & maximum SDF values
+		std::cout << "minimum SDF: " << min_max_sdf.first << " maximum SDF: " << min_max_sdf.second << std::endl;
+
+		if (SDFexists)
+		{
+			// write face sdf values to a file
+			std::ofstream ofile(face_sdf_file);
+			ofile << min_max_sdf.first << "\n";
+			ofile << min_max_sdf.second << "\n";
+			for (Polyhedron::Facet_const_iterator fi = mesh.facets_begin(); fi != mesh.facets_end(); ++fi)
+				ofile << sdf_property_map[fi] << "\n";
+		}
+	}
 
 	nT1 = normalize_diameter(T1, min_max_sdf);
 	nT2 = normalize_diameter(T2, min_max_sdf);
@@ -201,7 +236,7 @@ size_t populate_memos(
 		boost::put(Vertex_memo_map, vi, vmemo);
 	}
 
-	double sdf_sum = 0.0, v_sdf = 0.0, v_area = 0.0;
+	double sdf_sum = 0.0, v_sdf = 0.0, proj_area = 0.0,  v_area = 0.0, area_avg = 0.0;
 	int count = 0;
 	size_t movable = 0;
 	Polyhedron::Halfedge_const_handle he1;
@@ -217,22 +252,21 @@ size_t populate_memos(
 		// add sdf values from neighboring faces
 		do
 		{
-			sdf_sum += sdf_property_map[he2->facet()];
-			v_area += Facet_area_map[he2->facet()] * Kernel::Compute_scalar_product_3()(vnormal_map[vi], fnormal_map[he2->facet()]);
+			proj_area = Facet_area_map[he2->facet()] * Kernel::Compute_scalar_product_3()(vnormal_map[vi], fnormal_map[he2->facet()]);
+			sdf_sum += sdf_property_map[he2->facet()] * proj_area;
+			v_area += proj_area;
 			count++;
 			he2 = he2->next_on_vertex(); // loop over halfedges on the vertex
 		} while (he2 != he1);
 		// map vertex to average of neighboring face sdf values
 
-		v_sdf = sdf_sum / count;
-		//std::cout << v_area << std::endl;
-		//v_area = 0.001;
+		v_sdf = sdf_sum / v_area;
+		area_avg += v_area;
 
 		Vertex_memo_map[vi].set_normal(vnormal_map[vi]);
 		Vertex_memo_map[vi].set_sdf(v_sdf);
-		Vertex_memo_map[vi].set_area(v_area);
+		Vertex_memo_map[vi].set_area_factor(v_area);
 		Vertex_memo_map[vi].set_ref_point(vi->point() - unnormalize_diameter(v_sdf, min_max_sdf)*vnormal_map[vi] / 2.0);
-		Vertex_memo_map[vi].compute_force(K_SDF, K_S, K_D, nT1);
 
 		// index is zero if the vertex is fixed
 		if (v_sdf <= nT2)
@@ -241,16 +275,38 @@ size_t populate_memos(
 			Vertex_memo_map[vi].index = 0;
 	}
 
+	area_avg /= mesh.size_of_vertices();
+	std::cout << "Average area = " << area_avg << std::endl;
+
+	// compute vertex force and Jacobians after setting area factor
+	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
+	{
+		Vertex_memo_map[vi].set_area_factor(Vertex_memo_map[vi].get_area_factor() / area_avg);
+		Vertex_memo_map[vi].compute_force(K_SDF, K_S, K_D, nT1);
+	}
+
 	populate_halfedge_memos(mesh, Vertex_memo_map, Halfedge_memo_map);
 
 	return movable;
 }
 
+// return location indicies of 3x3 submatrix starting at (row, col) in 2 row location format
+arma::umat getLocationIndices(
+	int row,
+	int col
+)
+{
+	arma::umat loc;
+	loc << row << row + 1 << row + 2 << row << row + 1 << row + 2 << row << row + 1 << row + 2 << arma::endr
+		<< col << col << col << col + 1 << col + 1 << col + 1 << col + 2 << col + 2 << col + 2 << arma::endr;
+	return loc;
+}
+
 // assembly
 void global_assembly(
 	arma::vec& FORCE,
-	arma::mat& JPOS,
-	arma::mat& JVEL,
+	arma::sp_mat& JPOS,
+	arma::sp_mat& JVEL,
 	arma::vec& VELOCITY,
 	const size_t& N,
 	const Polyhedron& mesh,
@@ -259,38 +315,80 @@ void global_assembly(
 )
 {
 	FORCE.set_size(N * 3);
-	JPOS.set_size(N * 3, N * 3);
-	JVEL.set_size(N * 3, N * 3);
 	VELOCITY.set_size(N * 3);
 
 	FORCE.fill(0.0);
-	JPOS.fill(0.0);
-	JVEL.fill(0.0);
 	VELOCITY.fill(0.0);
 
-	int s_idx, e_idx;
+	arma::umat locations;
+	arma::vec JPOSvalues, JVELvalues;
+
+	int s_idx, e_idx, count = 0;
+	// compute the number of entries in sparse Jacobian matrices
+	for (Polyhedron::Halfedge_const_iterator hi = mesh.halfedges_begin(); hi != mesh.halfedges_end(); ++hi)
+	{
+		if (Halfedge_memo_map[hi].isMaster > 0)
+		{
+			s_idx = ((int)Vertex_memo_map[hi->vertex()].index - 1) * 3;
+			e_idx = ((int)Vertex_memo_map[hi->opposite()->vertex()].index - 1) * 3;
+			FORCE(arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_force();
+			count += 9;
+
+			if (e_idx >= 0) // if the opposite vertex is also movable
+			{
+				FORCE(arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_force();
+				count += 27;
+			}
+		}
+	}
+
+	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
+	{
+		if (Vertex_memo_map[vi].index > 0)
+		{
+			s_idx = (Vertex_memo_map[vi].index - 1) * 3;
+			FORCE(arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_force();
+			VELOCITY(arma::span(s_idx, s_idx + 2)) = Vertex_memo_map[vi].get_velocity(); //TODO: this is unnecessary during updation
+			count += 9;
+		}
+	}
+
+	locations.set_size(2, count);
+	JPOSvalues.set_size(count);
+	JVELvalues.set_size(count);
+	
+	count = 0;
 	// loop over each halfedge
 	for (Polyhedron::Halfedge_const_iterator hi = mesh.halfedges_begin(); hi != mesh.halfedges_end(); ++hi)
 	{
 		if (Halfedge_memo_map[hi].isMaster > 0)
 		{
-			s_idx = ((int)Vertex_memo_map[hi->vertex()].index - 1)*3;
-			e_idx = ((int)Vertex_memo_map[hi->opposite()->vertex()].index - 1)*3;
-			FORCE(arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_force();
-			JPOS(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_pos();
-			JVEL(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_vel();
+			s_idx = ((int)Vertex_memo_map[hi->vertex()].index - 1) * 3;
+			e_idx = ((int)Vertex_memo_map[hi->opposite()->vertex()].index - 1) * 3;
+
+			JPOSvalues(arma::span(count, count + 8)) = arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_pos());
+			JVELvalues(arma::span(count, count + 8)) = arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_vel());
+			locations(arma::span::all, arma::span(count, count + 8)) = getLocationIndices(s_idx, s_idx);
+			count += 9;
 
 			if (e_idx >= 0) // if the opposite vertex is also movable
 			{
-				FORCE(arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_force();
 
-				JPOS(arma::span(e_idx, e_idx + 2), arma::span(e_idx, e_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_pos();
-				JPOS(arma::span(s_idx, s_idx + 2), arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_pos();
-				JPOS(arma::span(e_idx, e_idx + 2), arma::span(s_idx, s_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_pos();
 
-				JVEL(arma::span(e_idx, e_idx + 2), arma::span(e_idx, e_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_vel();
-				JVEL(arma::span(s_idx, s_idx + 2), arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_vel();
-				JVEL(arma::span(e_idx, e_idx + 2), arma::span(s_idx, s_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_vel();
+				JPOSvalues(arma::span(count, count + 8)) = arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_pos());
+				JVELvalues(arma::span(count, count + 8)) = arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_vel());
+				locations(arma::span::all, arma::span(count, count + 8)) = getLocationIndices(e_idx, e_idx);
+				count += 9;
+
+				JPOSvalues(arma::span(count, count + 8)) = -arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_pos());
+				JVELvalues(arma::span(count, count + 8)) = -arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_vel());
+				locations(arma::span::all, arma::span(count, count + 8)) = getLocationIndices(s_idx, e_idx);
+				count += 9;
+
+				JPOSvalues(arma::span(count, count + 8)) = -arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_pos());
+				JVELvalues(arma::span(count, count + 8)) = -arma::vectorise(Halfedge_memo_map[hi].get_Jacobian_vel());
+				locations(arma::span::all, arma::span(count, count + 8)) = getLocationIndices(e_idx, s_idx);
+				count += 9;
 			}
 		}
 	}
@@ -300,14 +398,83 @@ void global_assembly(
 	{
 		if (Vertex_memo_map[vi].index > 0)
 		{
-			s_idx = (Vertex_memo_map[vi].index - 1)*3;
+			s_idx = (Vertex_memo_map[vi].index - 1) * 3;
 			FORCE(arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_force();
-			JPOS(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_Jacobian_pos();
-			JVEL(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_Jacobian_vel();
 			VELOCITY(arma::span(s_idx, s_idx + 2)) = Vertex_memo_map[vi].get_velocity(); //TODO: this is unnecessary during updation
+
+			JPOSvalues(arma::span(count, count + 8)) = arma::vectorise(Vertex_memo_map[vi].get_Jacobian_pos());
+			JVELvalues(arma::span(count, count + 8)) = arma::vectorise(Vertex_memo_map[vi].get_Jacobian_vel());
+			locations(arma::span::all, arma::span(count, count + 8)) = getLocationIndices(s_idx, s_idx);
+			count += 9;
 		}
 	}
+
+	JPOS = arma::sp_mat(true, locations, JPOSvalues, N * 3, N * 3);
+	JVEL = arma::sp_mat(true, locations, JVELvalues, N * 3, N * 3);
 }
+
+//// assembly
+//void global_assembly(
+//	arma::vec& FORCE,
+//	arma::mat& JPOS,
+//	arma::mat& JVEL,
+//	arma::vec& VELOCITY,
+//	const size_t& N,
+//	const Polyhedron& mesh,
+//	const boost::associative_property_map<v_memo_map>& Vertex_memo_map,
+//	const boost::associative_property_map<he_memo_map>& Halfedge_memo_map
+//)
+//{
+//	FORCE.set_size(N * 3);
+//	JPOS.set_size(N * 3, N * 3);
+//	JVEL.set_size(N * 3, N * 3);
+//	VELOCITY.set_size(N * 3);
+//
+//	FORCE.fill(0.0);
+//	JPOS.fill(0.0);
+//	JVEL.fill(0.0);
+//	VELOCITY.fill(0.0);
+//
+//	int s_idx, e_idx;
+//	// loop over each halfedge
+//	for (Polyhedron::Halfedge_const_iterator hi = mesh.halfedges_begin(); hi != mesh.halfedges_end(); ++hi)
+//	{
+//		if (Halfedge_memo_map[hi].isMaster > 0)
+//		{
+//			s_idx = ((int)Vertex_memo_map[hi->vertex()].index - 1)*3;
+//			e_idx = ((int)Vertex_memo_map[hi->opposite()->vertex()].index - 1)*3;
+//			FORCE(arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_force();
+//			JPOS(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_pos();
+//			JVEL(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_vel();
+//
+//			if (e_idx >= 0) // if the opposite vertex is also movable
+//			{
+//				FORCE(arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_force();
+//
+//				JPOS(arma::span(e_idx, e_idx + 2), arma::span(e_idx, e_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_pos();
+//				JPOS(arma::span(s_idx, s_idx + 2), arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_pos();
+//				JPOS(arma::span(e_idx, e_idx + 2), arma::span(s_idx, s_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_pos();
+//
+//				JVEL(arma::span(e_idx, e_idx + 2), arma::span(e_idx, e_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_vel();
+//				JVEL(arma::span(s_idx, s_idx + 2), arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_vel();
+//				JVEL(arma::span(e_idx, e_idx + 2), arma::span(s_idx, s_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_vel();
+//			}
+//		}
+//	}
+//
+//	// loop over each vertex
+//	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
+//	{
+//		if (Vertex_memo_map[vi].index > 0)
+//		{
+//			s_idx = (Vertex_memo_map[vi].index - 1)*3;
+//			FORCE(arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_force();
+//			JPOS(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_Jacobian_pos();
+//			JVEL(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_Jacobian_vel();
+//			VELOCITY(arma::span(s_idx, s_idx + 2)) = Vertex_memo_map[vi].get_velocity(); //TODO: this is unnecessary during updation
+//		}
+//	}
+//}
 
 // compute update in velocity and position for one time step
 void march_one_time_step(
@@ -315,18 +482,20 @@ void march_one_time_step(
 	arma::vec& delta_POS,
 	const size_t& N,
 	const arma::vec& FORCE,
-	const arma::mat& JPOS,
-	const arma::mat& JVEL,
+	const arma::sp_mat& JPOS,
+	const arma::sp_mat& JVEL,
 	const arma::vec& VELOCITY
 )
 {
-	arma::mat A;
+	arma::sp_mat A;
 	arma::vec b;
 
-	A = arma::eye(N * 3, N * 3) - TIME_STEP*MASS_INV*JVEL - TIME_STEP*TIME_STEP*MASS_INV*JPOS;
+	A = arma::speye<arma::sp_mat>(N * 3, N * 3) - TIME_STEP*MASS_INV*JVEL - TIME_STEP*TIME_STEP*MASS_INV*JPOS;
 	b = TIME_STEP*MASS_INV*(FORCE + TIME_STEP*JPOS*VELOCITY);
 
-	delta_VEL = arma::inv(A)*b;
+	delta_VEL = arma::spsolve(A, b); // using SuperLU solver, TODO: use settings to compute faster, such as symmetric
+	//delta_VEL = arma::solve(arma::mat(A), b);
+	//delta_VEL = arma::inv_sympd(arma::mat(A))*b;
 	delta_POS = TIME_STEP*(VELOCITY + delta_VEL);
 }
 
@@ -339,8 +508,8 @@ void update(
 	boost::associative_property_map<v_memo_map>& Vertex_memo_map,
 	boost::associative_property_map<he_memo_map>& Halfedge_memo_map,
 	arma::vec& FORCE,
-	arma::mat& JPOS,
-	arma::mat& JVEL,
+	arma::sp_mat& JPOS,
+	arma::sp_mat& JVEL,
 	arma::vec& VELOCITY
 )
 {
@@ -414,8 +583,8 @@ double march_and_update(
 	boost::associative_property_map<v_memo_map>& Vertex_memo_map,
 	boost::associative_property_map<he_memo_map>& Halfedge_memo_map,
 	arma::vec& FORCE,
-	arma::mat& JPOS,
-	arma::mat& JVEL,
+	arma::sp_mat& JPOS,
+	arma::sp_mat& JVEL,
 	arma::vec& VELOCITY
 )
 {
@@ -446,13 +615,13 @@ int main()
 
 	// populate memos - compute and store normals, sdf, forces, and Jacobians
 	std::cout << "Populating memos..." << std::endl;
-	nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map); // nMove is the number of movable vertices
+	nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, true); // nMove is the number of movable vertices
 	std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
 	std::cout << std::endl;
 
 	arma::vec FORCE;
-	arma::mat JPOS;
-	arma::mat JVEL;
+	arma::sp_mat JPOS;
+	arma::sp_mat JVEL;
 	arma::vec VELOCITY;
 
 	// assemble
@@ -471,18 +640,18 @@ int main()
 	std::cout << "Integration completed!" << std::endl;
 	std::cout << std::endl;
 
-	// populate memos - compute and store normals, sdf, forces, and Jacobians
-	std::cout << "Populating memos..." << std::endl;
-	nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map); // nMove is the number of movable vertices
-	std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
-	std::cout << std::endl;
-
 	std::string meshOutFile = FILENAME.substr(0, FILENAME.size() - 4) + "_" + IDENTIFIER + ".off";
 	std::string outputFile = FILENAME.substr(0, FILENAME.size() - 4) + "_" + IDENTIFIER + ".out";
 
 	std::ofstream output(meshOutFile);
 	output << mesh;
 	output.close();
+
+	// populate memos - compute and store normals, sdf, forces, and Jacobians
+	std::cout << "Populating memos..." << std::endl;
+	nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, false); // nMove is the number of movable vertices
+	std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
+	std::cout << std::endl;
 
 	generateOutput(outputFile, mesh, Vertex_memo_map);
 

@@ -88,13 +88,14 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>C:\armadillo\include;C:\CGAL_Dependencies\boost_1_61_0;C:\CGAL_Dependencies\CGAL-4.8.1\auxiliary\gmp\include;C:\CGAL_Dependencies\CGAL-4.8.1\build\include;C:\CGAL_Dependencies\CGAL-4.8.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\superlu\SRC;C:\armadillo\include;C:\CGAL_Dependencies\boost_1_61_0;C:\CGAL_Dependencies\CGAL-4.8.1\auxiliary\gmp\include;C:\CGAL_Dependencies\CGAL-4.8.1\build\include;C:\CGAL_Dependencies\CGAL-4.8.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\LAPACK;C:\CGAL_Dependencies\CGAL-4.8.1\auxiliary\gmp\lib;C:\CGAL_Dependencies\boost_1_61_0\libs;C:\CGAL_Dependencies\CGAL-4.8.1\build\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libblas.lib;liblapack.lib;libgmp-10.lib;libmpfr-4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\superlu\vs\superlu\Release;C:\LAPACK;C:\CGAL_Dependencies\CGAL-4.8.1\auxiliary\gmp\lib;C:\CGAL_Dependencies\boost_1_61_0\libs;C:\CGAL_Dependencies\CGAL-4.8.1\build\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>superlu.lib;libblas.lib;liblapack.lib;libgmp-10.lib;libmpfr-4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LargeAddressAware>true</LargeAddressAware>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

@@ -25,11 +25,11 @@ public:
 	void set_velocity(const arma::vec& vel);
 	void set_ref_point(Kernel::Point_3 ref);
 	void set_sdf(double dia);
-	void set_area(double value);
+	void set_area_factor(double value);
 	double compute_length();
 	void compute_sdf_force(const double& K_sdf, const double& threshold_dia);
 	double get_sdf();
-	double get_area();
+	double get_area_factor();
 	arma::vec get_normal();
 	arma::vec get_velocity();
 	arma::vec get_sdf_force();
@@ -47,7 +47,7 @@ private:
 	double initial_length;
 	double current_length;
 	double sdf;
-	double area; // sum of projected area of all faces around the vertex
+	double area_factor; // sum of projected area of all faces around the vertex divided by average projected area for all vertices
 	arma::vec sdf_force;
 	arma::vec force;
 	arma::mat Jpos;

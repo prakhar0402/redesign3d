@@ -8,7 +8,7 @@ VertexMemo::VertexMemo()
 	velocity.set_size(3);
 	velocity.fill(0.0);
 	sdf = 0.0;
-	area = 1.0;
+	area_factor = 1.0;
 	ref_point = Kernel::Point_3(0.0, 0.0, 0.0);
 	initial_length = 0.0;
 	current_length = 0.0;
@@ -30,7 +30,7 @@ VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex)
 	sdf_force.set_size(3);
 	sdf_force.fill(0.0);
 	sdf = 0.0;
-	area = 1.0;
+	area_factor = 1.0;
 	ref_point = Kernel::Point_3(0.0, 0.0, 0.0);
 	initial_length = 0.0;
 	current_length = 0.0;
@@ -42,7 +42,7 @@ VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex)
 	Jvel.fill(0.0);
 }
 
-VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 vertex_normal, double dia = 0.0, double area_value = 1.0)
+VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 vertex_normal, double dia = 0.0, double af_value = 1.0)
 {
 	v = vertex;
 	normal.set_size(3);
@@ -52,7 +52,7 @@ VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 
 	sdf_force.set_size(3);
 	sdf_force.fill(0.0);
 	sdf = dia;
-	area = area_value;
+	area_factor = af_value;
 	ref_point = Kernel::Point_3(0.0, 0.0, 0.0);
 	initial_length = 0.0;
 	current_length = 0.0;
@@ -79,9 +79,9 @@ void VertexMemo::set_sdf(double dia)
 	sdf = dia;
 }
 
-void VertexMemo::set_area(double value)
+void VertexMemo::set_area_factor(double value)
 {
-	area = value;
+	area_factor = value;
 }
 
 void VertexMemo::set_ref_point(Kernel::Point_3 ref)
@@ -102,7 +102,7 @@ void VertexMemo::compute_sdf_force(const double& K_sdf, const double& threshold_
 {
 	double mag = 0.0;
 	if (threshold_dia > sdf)
-		mag = K_sdf*area*(1.0 - sdf / threshold_dia);
+		mag = K_sdf*area_factor*(1.0 - sdf / threshold_dia);
 		//mag = -K_sdf*area*std::log(sdf / threshold_dia);
 		//mag = K_sdf*area*(threshold_dia - sdf);
 		//mag = K_sdf*area*CGAL::square(threshold_dia - sdf);
@@ -138,9 +138,9 @@ double VertexMemo::get_sdf()
 	return sdf;
 }
 
-double VertexMemo::get_area()
+double VertexMemo::get_area_factor()
 {
-	return area;
+	return area_factor;
 }
 
 arma::vec VertexMemo::get_normal()

@@ -10,3 +10,11 @@ BLAS, LAPACK
  - Add <mingw>/bin to system PATH
  - Add BLAS and LAPACK lib directory and lib files to linker in project properties
  - Add BLAS and LAPACK dll to the same directory as the project executable
+SuperLU
+ - Download and unpack SuperLU package from http://crd-legacy.lbl.gov/~xiaoye/SuperLU/
+ - Use MS Visual Stdio to create a new project with Static Library as output (not .exe or .dll, but .lib). This can also be changed from Project Properties.
+ - Add the source file (.c and .h) in the <SuperLU>/SRC directory to the project and compile.
+ - After sucessful compilation, build in release mode to skip the debug information. The required .lib file will be generated.
+ - Close the project, and add the <SuperLU>/SRC directory to your own project as Additional Include Directories in Project Properties.
+ - Add the release generated .lib file directory to Linker->Additional Include Directories.
+ - Add .lib file to Linker->Additional Dependencies.
