@@ -34,6 +34,7 @@ public:
 	arma::vec get_velocity();
 	arma::vec get_sdf_force();
 	size_t index;
+	bool isMovable;
 	void compute_force(const double& K_sdf, const double& K_s, const double& K_d, const double& threshold_dia);
 	arma::vec get_force();
 	arma::mat get_Jacobian_pos();

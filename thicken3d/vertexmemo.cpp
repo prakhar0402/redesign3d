@@ -18,6 +18,7 @@ VertexMemo::VertexMemo()
 	force.fill(0.0);
 	Jpos.fill(0.0);
 	Jvel.fill(0.0);
+	isMovable = false;
 }
 
 VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex)
@@ -40,6 +41,7 @@ VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex)
 	force.fill(0.0);
 	Jpos.fill(0.0);
 	Jvel.fill(0.0);
+	isMovable = false;
 }
 
 VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 vertex_normal, double dia = 0.0, double af_value = 1.0)
@@ -62,6 +64,7 @@ VertexMemo::VertexMemo(Polyhedron::Vertex_const_handle vertex, Kernel::Vector_3 
 	force.fill(0.0);
 	Jpos.fill(0.0);
 	Jvel.fill(0.0);
+	isMovable = false;
 }
 
 void VertexMemo::set_normal(Kernel::Vector_3 vertex_normal)
