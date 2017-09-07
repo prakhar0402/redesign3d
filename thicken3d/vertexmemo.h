@@ -1,7 +1,7 @@
 #ifndef VERTEXMEMO_H
 #define VERTEXMEMO_H
 
-#include "stdafx.h"
+//#include "stdafx.h"
 
 #include "halfedgememo.h"
 

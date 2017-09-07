@@ -1,7 +1,7 @@
 // thicken3d.cpp : Defines the entry point for the console application.
 //
-
-#include "stdafx.h"
+//#define _CRT_SECURE_NO_WARNINGS
+//#include "stdafx.h"
 
 #include "halfedgememo.h"
 #include "vertexmemo.h"
@@ -36,31 +36,31 @@ typedef boost::graph_traits<Polyhedron> GraphTraits;
 typedef GraphTraits::vertex_descriptor vertex_descriptor;
 
 // cactus
-std::string FILENAME = "data/cactus/cactus.off";
+std::string FILENAME = "../data/cactus/cactus.off";
 std::string IDENTIFIER = "test";
 double T1 = 0.1;
 double T2 = 0.15; // 1.5*T1
 
 //// part2
-//const std::string FILENAME = "data/part2_thins_uni/part2_thins_uni.off";
+//const std::string FILENAME = "../data/part2_thins_uni/part2_thins_uni.off";
 //const std::string IDENTIFIER = "0000";
 //const double T1 = 3.5;
 //const double T2 = 7; // 1.5*T1
 
 //// puzzlepart
-//const std::string FILENAME = "data/puzzlepart/puzzlepart_uni.off";
+//const std::string FILENAME = "../data/puzzlepart/puzzlepart_uni.off";
 //const std::string IDENTIFIER = "0007";
 //const double T1 = 3.5;
 //const double T2 = 5.25; // 1.5*t1
 
 //// fidgetflyer
-//const std::string FILENAME = "data/fidgetflyer/fidgetflyer.off";
+//const std::string FILENAME = "../data/fidgetflyer/fidgetflyer.off";
 //const std::string IDENTIFIER = "0001";
 //const double T1 = 3.5;
 //const double T2 = 5.25; // 1.5*T1
 
 //// part2
-//const std::string FILENAME = "data/part2_thins_uni/part2_thins_uni.off";
+//const std::string FILENAME = "../data/part2_thins_uni/part2_thins_uni.off";
 //const std::string IDENTIFIER = "0000";
 //const double T1 = 3.5;
 //const double T2 = 7; // 1.5*T1
@@ -446,8 +446,6 @@ void global_assembly(
 		if (Vertex_memo_map[vi].index > 0)
 		{
 			s_idx = (Vertex_memo_map[vi].index - 1) * 3;
-			FORCE(arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_force();
-			VELOCITY(arma::span(s_idx, s_idx + 2)) = Vertex_memo_map[vi].get_velocity(); //TODO: this is unnecessary during updation
 
 			JPOSvalues(arma::span(count, count + 8)) = arma::vectorise(Vertex_memo_map[vi].get_Jacobian_pos());
 			JVELvalues(arma::span(count, count + 8)) = arma::vectorise(Vertex_memo_map[vi].get_Jacobian_vel());

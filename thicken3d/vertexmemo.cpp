@@ -115,25 +115,28 @@ void VertexMemo::compute_sdf_force(const double& K_sdf, const double& threshold_
 
 void VertexMemo::compute_force(const double& K_sdf, const double& K_s, const double& K_d, const double& threshold_dia)
 {
-	compute_length();
-	compute_sdf_force(K_sdf, threshold_dia);
+	if (threshold_dia > sdf)
+	{
+		compute_length();
+		compute_sdf_force(K_sdf, threshold_dia);
 
-	arma::vec pos1, pos2, vec12;
-	pos1 << v->point().x() << v->point().y() << v->point().z();
-	pos2 << ref_point.x() << ref_point.y() << ref_point.z();
-	vec12 = pos2 - pos1; // vector pointing from pos1 to pos2
+		arma::vec pos1, pos2, vec12;
+		pos1 << v->point().x() << v->point().y() << v->point().z();
+		pos2 << ref_point.x() << ref_point.y() << ref_point.z();
+		vec12 = pos2 - pos1; // vector pointing from pos1 to pos2
 
-	arma::mat mv12 = vec12 * arma::trans(vec12); // product of different elements of vec12
+		arma::mat mv12 = vec12 * arma::trans(vec12); // product of different elements of vec12
 
-	double coef1 = K_s*(1 - initial_length / current_length);
-	double coef2 = K_s*initial_length / pow(current_length, 3);
+		double coef1 = K_s*(1 - initial_length / current_length);
+		double coef2 = K_s*initial_length / pow(current_length, 3);
 
-	force = coef1*vec12 + K_d*(-velocity) + sdf_force;
+		force = coef1*vec12 + K_d*(-velocity) + sdf_force;
 
-	Jpos = -coef2*mv12;
-	Jpos.diag() -= coef1;
+		Jpos = -coef2*mv12;
+		Jpos.diag() -= coef1;
 
-	Jvel.diag() -= K_d;
+		Jvel.diag() -= K_d;
+	}
 }
 
 double VertexMemo::get_sdf()
