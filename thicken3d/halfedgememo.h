@@ -1,7 +1,6 @@
 #ifndef HALFEDGEMEMO_H
 #define HALFEDGEMEMO_H
 
-//#include "stdafx.h"
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/squared_distance_3.h>

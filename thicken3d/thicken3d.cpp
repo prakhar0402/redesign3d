@@ -1,31 +1,20 @@
-// thicken3d.cpp : Defines the entry point for the console application.
-//
-//#define _CRT_SECURE_NO_WARNINGS
-//#include "stdafx.h"
-
 #include "halfedgememo.h"
 #include "vertexmemo.h"
 
-//#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-//#include <CGAL/Polyhedron_3.h>
 #include <CGAL/boost/graph/graph_traits_Polyhedron_3.h>
 #include <CGAL/IO/Polyhedron_iostream.h>
 #include <CGAL/mesh_segmentation.h>
 #include <CGAL/property_map.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
-
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/IO/Polyhedron_iostream.h> 
 #include <CGAL/boost/graph/graph_traits_Polyhedron_3.h>
 #include <CGAL/boost/graph/properties_Polyhedron_3.h>
 
-#include <armadillo>
-
+#include <random>
 #include <iostream>
 #include <fstream>
 
-//typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
-//typedef CGAL::Polyhedron_3<Kernel> Polyhedron;
 typedef std::map<Polyhedron::Halfedge_const_handle, HalfedgeMemo> he_memo_map;
 typedef std::map<Polyhedron::Vertex_const_handle, VertexMemo> v_memo_map;
 
@@ -35,39 +24,21 @@ typedef Kernel::Vector_3 Vector;
 typedef boost::graph_traits<Polyhedron> GraphTraits;
 typedef GraphTraits::vertex_descriptor vertex_descriptor;
 
-// cactus
+// CONSTANTS
 std::string FILENAME = "../data/cactus/cactus.off";
 std::string IDENTIFIER = "test";
-double T1 = 0.1;
-double T2 = 0.15; // 1.5*T1
 
-//// part2
-//const std::string FILENAME = "../data/part2_thins_uni/part2_thins_uni.off";
-//const std::string IDENTIFIER = "0000";
-//const double T1 = 3.5;
-//const double T2 = 7; // 1.5*T1
+// SDF parameters
+const size_t number_of_rays = 30;  // cast rays per facet
+const double cone_angle = CGAL_PI / 6.0; // set cone opening-angle
+std::default_random_engine re;
 
-//// puzzlepart
-//const std::string FILENAME = "../data/puzzlepart/puzzlepart_uni.off";
-//const std::string IDENTIFIER = "0007";
-//const double T1 = 3.5;
-//const double T2 = 5.25; // 1.5*t1
+double Td = 0.1;
 
-//// fidgetflyer
-//const std::string FILENAME = "../data/fidgetflyer/fidgetflyer.off";
-//const std::string IDENTIFIER = "0001";
-//const double T1 = 3.5;
-//const double T2 = 5.25; // 1.5*T1
-
-//// part2
-//const std::string FILENAME = "../data/part2_thins_uni/part2_thins_uni.off";
-//const std::string IDENTIFIER = "0000";
-//const double T1 = 3.5;
-//const double T2 = 7; // 1.5*T1
-
-double K_SDF = 8.0;
 double K_S = 128.0;
 double K_D = 64.0;
+double ksdf_multiplier = 1.2;
+double K_SDF = ksdf_multiplier * K_S * Td;
 
 double VERTEX_MASS = 1.0;
 double MASS_INV = 1.0 / VERTEX_MASS;
@@ -76,49 +47,13 @@ double TIME_STEP = 1.0;
 double TOTAL_TIME = 50.0;
 size_t STEPS = (size_t)std::ceil(TOTAL_TIME / TIME_STEP);
 
+// Global Variables
 std::pair<double, double> min_max_sdf;
 double nT1, nT2;
-size_t nMove;
-
+size_t nMove = 0;
 arma::vec max_change_vec(STEPS);
 
-// creates an output file with all the necessary parameters and output values
-void generateOutput(
-	const std::string filename,
-	const Polyhedron& mesh,
-	const boost::associative_property_map<v_memo_map>& Vertex_memo_map
-)
-{
-	std::ofstream ofile(filename);
-	ofile << "Input File:\n" << FILENAME << "\n";
-	ofile << "Output Identifier:\n" << IDENTIFIER << "\n";
-	ofile << "Strict Threshold:\n" << T1 << "\n";
-	ofile << "Moderate Threshold:\n" << T2 << "\n";
-	ofile << "Force Constant SDF:\n" << K_SDF << "\n";
-	ofile << "Force Constant Spring:\n" << K_S << "\n";
-	ofile << "Force Constant Damper:\n" << K_D << "\n";
-	ofile << "Vertex Mass:\n" << VERTEX_MASS << "\n";
-	ofile << "Time Step:\n" << TIME_STEP << "\n";
-	ofile << "Total Time:\n" << TOTAL_TIME << "\n";
-	ofile << "Steps:\n" << STEPS << "\n";
-	ofile << "Min SDF:\n" << min_max_sdf.first << "\n";
-	ofile << "Max SDF:\n" << min_max_sdf.second << "\n";
-	ofile << "Number of Movable Vertices:\n" << nMove << "\n";
-	ofile << "Total Number of Vertices:\n" << mesh.size_of_vertices() << "\n";
-	ofile << "SDF Values:\n";
-	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
-		ofile << Vertex_memo_map[vi].get_sdf() << "\n";
-	ofile << "Vertex Movable Index:\n";
-	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
-		ofile << Vertex_memo_map[vi].index << "\n";
-	ofile << "Normal Vectors:\n";
-	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
-		ofile << arma::trans(Vertex_memo_map[vi].get_normal());
-	ofile << "Max Change:\n";
-	ofile << max_change_vec;
-	ofile.close();
-}
-
+// normalize between 0 and 1 based on min and max SDF values
 double normalize_diameter(
 	const double diameter,
 	const std::pair<double, double>& min_max_sdf
@@ -127,6 +62,7 @@ double normalize_diameter(
 	return (diameter - min_max_sdf.first) / (min_max_sdf.second - min_max_sdf.first);
 }
 
+// unnormalize from 0 and 1 based on min and max SDF values
 double unnormalize_diameter(
 	const double diameter,
 	const std::pair<double, double>& min_max_sdf
@@ -135,6 +71,7 @@ double unnormalize_diameter(
 	return diameter * (min_max_sdf.second - min_max_sdf.first) + min_max_sdf.first;
 }
 
+// set n_ring neighborhood to movable
 void setMovable(
 	const Polyhedron& mesh,
 	boost::associative_property_map<v_memo_map>& Vertex_memo_map,
@@ -241,8 +178,6 @@ size_t populate_memos(
 
 		// It is possible to compute the raw SDF values and post-process them using
 		// the following lines:
-		const std::size_t number_of_rays = 25;  // cast 25 rays per facet
-		const double cone_angle = 2.0 / 3.0 * CGAL_PI; // set cone opening-angle
 		CGAL::sdf_values(mesh, sdf_property_map, cone_angle, number_of_rays, false);
 		min_max_sdf = CGAL::sdf_values_postprocessing(mesh, sdf_property_map);
 
@@ -260,8 +195,8 @@ size_t populate_memos(
 		}
 	}
 
-	nT1 = normalize_diameter(T1, min_max_sdf);
-	nT2 = normalize_diameter(T2, min_max_sdf);
+	// normalize the threshold diameter based on min and max SDF values
+	nT1 = normalize_diameter(Td, min_max_sdf);
 
 	// compute face area
 	Facet_double_map fam;
@@ -314,11 +249,11 @@ size_t populate_memos(
 		Vertex_memo_map[vi].set_ref_point(vi->point() - unnormalize_diameter(v_sdf, min_max_sdf)*vnormal_map[vi] / 2.0);
 
 		if (v_sdf <= nT1)
-			setMovable(mesh, Vertex_memo_map, vi, 3);
+			setMovable(mesh, Vertex_memo_map, vi, 3); // set 3-ring neighborhood vertices to movable
 	}
 
 	area_avg /= mesh.size_of_vertices();
-	std::cout << "Average area = " << area_avg << std::endl;
+	//std::cout << "Average area = " << area_avg << std::endl;
 
 	// compute vertex force and Jacobians after setting area factor
 	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
@@ -371,7 +306,7 @@ void global_assembly(
 	arma::vec JPOSvalues, JVELvalues;
 
 	int s_idx, e_idx, count = 0;
-	// compute the number of entries in sparse Jacobian matrices
+	// compute the number of entries in sparse Jacobian matrices and fill FORCE and VELOCITY
 	for (Polyhedron::Halfedge_const_iterator hi = mesh.halfedges_begin(); hi != mesh.halfedges_end(); ++hi)
 	{
 		if (Halfedge_memo_map[hi].isMaster > 0)
@@ -454,72 +389,10 @@ void global_assembly(
 		}
 	}
 
+	// fill sparse matrices JPOS and JVEL
 	JPOS = arma::sp_mat(true, locations, JPOSvalues, N * 3, N * 3);
 	JVEL = arma::sp_mat(true, locations, JVELvalues, N * 3, N * 3);
 }
-
-//// assembly
-//void global_assembly(
-//	arma::vec& FORCE,
-//	arma::mat& JPOS,
-//	arma::mat& JVEL,
-//	arma::vec& VELOCITY,
-//	const size_t& N,
-//	const Polyhedron& mesh,
-//	const boost::associative_property_map<v_memo_map>& Vertex_memo_map,
-//	const boost::associative_property_map<he_memo_map>& Halfedge_memo_map
-//)
-//{
-//	FORCE.set_size(N * 3);
-//	JPOS.set_size(N * 3, N * 3);
-//	JVEL.set_size(N * 3, N * 3);
-//	VELOCITY.set_size(N * 3);
-//
-//	FORCE.fill(0.0);
-//	JPOS.fill(0.0);
-//	JVEL.fill(0.0);
-//	VELOCITY.fill(0.0);
-//
-//	int s_idx, e_idx;
-//	// loop over each halfedge
-//	for (Polyhedron::Halfedge_const_iterator hi = mesh.halfedges_begin(); hi != mesh.halfedges_end(); ++hi)
-//	{
-//		if (Halfedge_memo_map[hi].isMaster > 0)
-//		{
-//			s_idx = ((int)Vertex_memo_map[hi->vertex()].index - 1)*3;
-//			e_idx = ((int)Vertex_memo_map[hi->opposite()->vertex()].index - 1)*3;
-//			FORCE(arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_force();
-//			JPOS(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_pos();
-//			JVEL(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_vel();
-//
-//			if (e_idx >= 0) // if the opposite vertex is also movable
-//			{
-//				FORCE(arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_force();
-//
-//				JPOS(arma::span(e_idx, e_idx + 2), arma::span(e_idx, e_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_pos();
-//				JPOS(arma::span(s_idx, s_idx + 2), arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_pos();
-//				JPOS(arma::span(e_idx, e_idx + 2), arma::span(s_idx, s_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_pos();
-//
-//				JVEL(arma::span(e_idx, e_idx + 2), arma::span(e_idx, e_idx + 2)) += Halfedge_memo_map[hi].get_Jacobian_vel();
-//				JVEL(arma::span(s_idx, s_idx + 2), arma::span(e_idx, e_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_vel();
-//				JVEL(arma::span(e_idx, e_idx + 2), arma::span(s_idx, s_idx + 2)) -= Halfedge_memo_map[hi].get_Jacobian_vel();
-//			}
-//		}
-//	}
-//
-//	// loop over each vertex
-//	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
-//	{
-//		if (Vertex_memo_map[vi].index > 0)
-//		{
-//			s_idx = (Vertex_memo_map[vi].index - 1)*3;
-//			FORCE(arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_force();
-//			JPOS(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_Jacobian_pos();
-//			JVEL(arma::span(s_idx, s_idx + 2), arma::span(s_idx, s_idx + 2)) += Vertex_memo_map[vi].get_Jacobian_vel();
-//			VELOCITY(arma::span(s_idx, s_idx + 2)) = Vertex_memo_map[vi].get_velocity(); //TODO: this is unnecessary during updation
-//		}
-//	}
-//}
 
 // compute update in velocity and position for one time step
 void march_one_time_step(
@@ -601,8 +474,6 @@ void update(
 		if (Halfedge_memo_map[hi].isMaster > 0)
 			Halfedge_memo_map[hi].compute_force(K_S, K_D, Vertex_memo_map[hi->vertex()].get_velocity(), Vertex_memo_map[hi->opposite()->vertex()].get_velocity());
 	}
-
-	global_assembly(FORCE, JPOS, JVEL, VELOCITY, N, mesh, Vertex_memo_map, Halfedge_memo_map);
 }
 
 // computes the maxima of change of location of vertices
@@ -635,11 +506,49 @@ double march_and_update(
 {
 	arma::vec delta_VEL;
 	arma::vec delta_POS;
+
+	global_assembly(FORCE, JPOS, JVEL, VELOCITY, N, mesh, Vertex_memo_map, Halfedge_memo_map);
 	march_one_time_step(delta_VEL, delta_POS, N, FORCE, JPOS, JVEL, VELOCITY);
 	update(delta_POS, delta_VEL, N, mesh, Vertex_memo_map, Halfedge_memo_map, FORCE, JPOS, JVEL, VELOCITY);
+
 	return max_change(delta_POS);
 }
 
+// creates an output file with all the necessary parameters and output values
+void generateOutput(
+	const std::string filename,
+	const Polyhedron& mesh,
+	const boost::associative_property_map<v_memo_map>& Vertex_memo_map
+)
+{
+	std::ofstream ofile(filename);
+	ofile << "Input File:\n" << FILENAME << "\n";
+	ofile << "Output Identifier:\n" << IDENTIFIER << "\n";
+	ofile << "Strict Threshold:\n" << Td << "\n";
+	ofile << "Force Constant SDF:\n" << K_SDF << "\n";
+	ofile << "Force Constant Spring:\n" << K_S << "\n";
+	ofile << "Force Constant Damper:\n" << K_D << "\n";
+	ofile << "Vertex Mass:\n" << VERTEX_MASS << "\n";
+	ofile << "Time Step:\n" << TIME_STEP << "\n";
+	ofile << "Total Time:\n" << TOTAL_TIME << "\n";
+	ofile << "Steps:\n" << STEPS << "\n";
+	ofile << "Min SDF:\n" << min_max_sdf.first << "\n";
+	ofile << "Max SDF:\n" << min_max_sdf.second << "\n";
+	ofile << "Number of Movable Vertices:\n" << nMove << "\n";
+	ofile << "Total Number of Vertices:\n" << mesh.size_of_vertices() << "\n";
+	ofile << "SDF Values:\n";
+	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
+		ofile << Vertex_memo_map[vi].get_sdf() << "\n";
+	ofile << "Vertex Movable Index:\n";
+	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
+		ofile << Vertex_memo_map[vi].index << "\n";
+	ofile << "Normal Vectors:\n";
+	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
+		ofile << arma::trans(Vertex_memo_map[vi].get_normal());
+	ofile << "Max Change:\n";
+	ofile << max_change_vec;
+	ofile.close();
+}
 
 // print usage
 void print_usage()
@@ -652,11 +561,10 @@ void print_usage()
 	std::cout << "FLAGS:" << std::endl;
 	std::cout << "\t-f:\tinput file path FILENAME (default = \"data\\cactus\\cactus.off\")" << std::endl;
 	std::cout << "\t-id:\texperiment index IDENTIFIER (default = \"test\")" << std::endl;
-	std::cout << "\t-t1:\tthreshold T1 (default = 0.1)" << std::endl;
-	std::cout << "\t-t2:\tthreshold T2 (default = 0.15)" << std::endl;
-	std::cout << "\t-ksdf:\tforce constant K_SDF (default = 8.0)" << std::endl;
-	std::cout << "\t-ks:\tspring constant K_S (default = 128.0)" << std::endl;
-	std::cout << "\t-kd:\tdamper constant K_D (default = 64.0)" << std::endl;
+	std::cout << "\t-td:\tthreshold Td (default = 0.1)" << std::endl;
+	std::cout << "\t-ks:\tspring constant K_S (default = 64.0)" << std::endl;
+	std::cout << "\t-kd:\tdamper constant K_D (default = 1024.0)" << std::endl;
+	std::cout << "\t-ksdf:\tforce constant multiplier ksdf_multiplier (default = 1.2)" << std::endl;
 	std::cout << "\t-vm:\tvertex mass VERTEX_MASS (default = 1.0)" << std::endl;
 	std::cout << "\t-ts:\tone time step TIME_STEP (default = 1.0)" << std::endl;
 	std::cout << "\t-t:\ttotal time TOTAL_TIME (default = 50.0)" << std::endl;
@@ -681,16 +589,14 @@ int main(int argc, char *argv[])
 				FILENAME = argv[++i];
 			if (flag == "-id")
 				IDENTIFIER = argv[++i];
-			if (flag == "-t1")
-				T1 = std::atof(argv[++i]);
-			if (flag == "-t2")
-				T2 = std::atof(argv[++i]);
-			if (flag == "-ksdf")
-				K_SDF = std::atof(argv[++i]);
+			if (flag == "-td")
+				Td = std::atof(argv[++i]);
 			if (flag == "-ks")
 				K_S = std::atof(argv[++i]);
 			if (flag == "-kd")
 				K_D = std::atof(argv[++i]);
+			if (flag == "-ksdf")
+				ksdf_multiplier = std::atof(argv[++i]);
 			if (flag == "-vm")
 				VERTEX_MASS = std::atof(argv[++i]);
 			if (flag == "-ts")
@@ -703,11 +609,18 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	// redefine dependent parameters
+	K_SDF = ksdf_multiplier * K_S * Td;
 	MASS_INV = 1.0 / VERTEX_MASS;
 	STEPS = (size_t)std::ceil(TOTAL_TIME / TIME_STEP);
+	max_change_vec.set_size(STEPS);
 
+	// output filenames
 	std::string meshOutFile = FILENAME.substr(0, FILENAME.size() - 4) + "_" + IDENTIFIER + ".off";
 	std::string outputFile = FILENAME.substr(0, FILENAME.size() - 4) + "_" + IDENTIFIER + ".out";
+
+	// seed for random number generator
+	re.seed(0);
 
 	// create and read Polyhedron
 	Polyhedron mesh;
@@ -730,18 +643,12 @@ int main(int argc, char *argv[])
 	std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
 	std::cout << std::endl;
 
-	if (STEPS > 0)
+	if (STEPS > 0 && nMove > 0)
 	{
 		arma::vec FORCE;
 		arma::sp_mat JPOS;
 		arma::sp_mat JVEL;
 		arma::vec VELOCITY;
-
-		// assemble
-		std::cout << "Assembling..." << std::endl;
-		global_assembly(FORCE, JPOS, JVEL, VELOCITY, nMove, mesh, Vertex_memo_map, Halfedge_memo_map);
-		std::cout << "Assembling completed!" << std::endl;
-		std::cout << std::endl;
 
 		// numerical time integration
 		max_change_vec.fill(0.0);
@@ -753,10 +660,6 @@ int main(int argc, char *argv[])
 		std::cout << "Integration completed!" << std::endl;
 		std::cout << std::endl;
 
-		std::ofstream output(meshOutFile);
-		output << mesh;
-		output.close();
-
 		// populate memos - compute and store normals, sdf, forces, and Jacobians
 		std::cout << "Populating memos..." << std::endl;
 		nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, false); // nMove is the number of movable vertices
@@ -764,6 +667,12 @@ int main(int argc, char *argv[])
 		std::cout << std::endl;
 	}
 
+	// write output mesh into a file
+	std::ofstream output(meshOutFile);
+	output << mesh;
+	output.close();
+
+	// write other output values and parameters into a result file
 	generateOutput(outputFile, mesh, Vertex_memo_map);
 
 	return EXIT_SUCCESS;

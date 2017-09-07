@@ -2,9 +2,9 @@ clear all
 close all
 clc
 
-addpath(genpath('../../../../alecjacobson-gptoolbox-00c124c'));
+addpath(genpath('../../../alecjacobson-gptoolbox-00c124c'));
 
-inputFile = 'cactus/cactus';
+inputFile = '../data/cactus/cactus';
 % inputFile = 'part2_thins_uni/part2_thins_uni';
 % inputFile = 'puzzlepart/puzzlepart_uni';
 % inputFile = 'fidgetflyer/fidgetflyer';
@@ -12,11 +12,11 @@ inputFile = 'cactus/cactus';
 % inputFile = 'rabbit/rabbit';
 % inputFile = 'chess/chess1';
 % inputFile = 'table/table';
-inputFile = 'chair/chair2';
+% inputFile = 'chair/chair2';
 
 [V, F] = readOFF([inputFile, '.off']);
 
-outputIdentifier = '0001';
+outputIdentifier = 'test';
 filename = [inputFile, '_', outputIdentifier];
 
 [V, F] = readOFF([filename, '.off']);
@@ -28,8 +28,6 @@ line = fgetl(fid);
 identifier = fgetl(fid);
 line = fgetl(fid);
 T1 = fscanf(fid, '%f\n', 1);
-line = fgetl(fid);
-T2 = fscanf(fid, '%f\n', 1);
 line = fgetl(fid);
 K_SDF = fscanf(fid, '%f\n', 1);
 line = fgetl(fid);

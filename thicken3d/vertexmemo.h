@@ -1,8 +1,6 @@
 #ifndef VERTEXMEMO_H
 #define VERTEXMEMO_H
 
-//#include "stdafx.h"
-
 #include "halfedgememo.h"
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>

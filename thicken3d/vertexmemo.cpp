@@ -127,8 +127,8 @@ void VertexMemo::compute_force(const double& K_sdf, const double& K_s, const dou
 
 		arma::mat mv12 = vec12 * arma::trans(vec12); // product of different elements of vec12
 
-		double coef1 = K_s*(1 - initial_length / current_length);
-		double coef2 = K_s*initial_length / pow(current_length, 3);
+		double coef1 = 2.0*K_s*(1 - initial_length / current_length);
+		double coef2 = 2.0*K_s*initial_length / pow(current_length, 3);
 
 		force = coef1*vec12 + K_d*(-velocity) + sdf_force;
 
