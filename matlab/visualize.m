@@ -4,19 +4,21 @@ clc
 
 addpath(genpath('../../../alecjacobson-gptoolbox-00c124c'));
 
-inputFile = '../data/cactus/cactus';
-% inputFile = 'part2_thins_uni/part2_thins_uni';
-% inputFile = 'puzzlepart/puzzlepart_uni';
-% inputFile = 'fidgetflyer/fidgetflyer';
-% inputFile = 'horse/horse2';
-% inputFile = 'rabbit/rabbit';
-% inputFile = 'chess/chess1';
-% inputFile = 'table/table';
-% inputFile = 'chair/chair2';
+% inputFile = '../data/cactus/cactus';
+inputFile = '../data/part2_thins_uni/part2_thins_uni';
+% inputFile = '../data/part2_thins_uni/part2_thins_uni_f001';
+% inputFile = '../data/part2_thins_uni/part2_thins_uni_f001_f001';
+% inputFile = '../data/puzzlepart/puzzlepart_uni';
+% inputFile = '../data/fidgetflyer/fidgetflyer';
+% inputFile = '../data/horse/horse2';
+% inputFile = '../data/rabbit/rabbit';
+% inputFile = '../data/chess/chess1';
+% inputFile = '../data/table/table';
+% inputFile = '../data/chair/chair4';
 
 [V, F] = readOFF([inputFile, '.off']);
 
-outputIdentifier = 'test';
+outputIdentifier = 'f001';
 filename = [inputFile, '_', outputIdentifier];
 
 [V, F] = readOFF([filename, '.off']);
@@ -83,12 +85,13 @@ patch('Faces',F,'Vertices',V,'FaceVertexCData',1*(sdf < T1) + 0*(movable_index >
 colorbar
 axis equal
 xlabel({inputFile, outputIdentifier}, 'fontweight', 'bold')
-set(gca, 'XTick', '', 'YTick', '')
+% set(gca, 'XTick', '', 'YTick', '')
 box on
 hold on
 % quiver3(V(:, 1), V(:, 2), V(:, 3), normals(:, 1), normals(:, 2), normals(:, 3));
 
 figure
-plot(TIME_STEP:TIME_STEP:TIME_STEP*STEPS, max_change)
-xlabel('Time (in secs)');
-ylabel('Maxima of Change in Vertex Location')
+plot(TIME_STEP:TIME_STEP:TIME_STEP*STEPS, max_change, 'LineWidth', 2)
+xlabel('Time Steps', 'FontWeight', 'bold', 'FontSize', 20);
+ylabel({'Maxima of','Vertex Displacements'}, 'FontWeight', 'bold', 'FontSize', 20)
+axis square

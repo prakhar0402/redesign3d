@@ -25,18 +25,20 @@ public:
 	void set_sdf(double dia);
 	void set_area_factor(double value);
 	double compute_length();
-	void compute_sdf_force(const double& K_sdf, const double& threshold_dia);
+	//void compute_sdf_force(const double& K_sdf, const double& threshold_dia);
 	double get_sdf();
 	double get_area_factor();
 	arma::vec get_normal();
 	arma::vec get_velocity();
-	arma::vec get_sdf_force();
+	double get_sdf_force();
 	size_t index;
 	bool isMovable;
-	void compute_force(const double& K_sdf, const double& K_s, const double& K_d, const double& threshold_dia);
+	void compute_force(const double& K_sdf, const double& K_s, const double& K_d);
 	arma::vec get_force();
 	arma::mat get_Jacobian_pos();
 	arma::mat get_Jacobian_vel();
+	void setSDFForceMag(double f);
+	void setMaxSDFMag(double f);
 
 private:
 	Polyhedron::Vertex_const_handle v;
@@ -46,8 +48,8 @@ private:
 	double initial_length;
 	double current_length;
 	double sdf;
+	double sdf_force;
 	double area_factor; // sum of projected area of all faces around the vertex divided by average projected area for all vertices
-	arma::vec sdf_force;
 	arma::vec force;
 	arma::mat Jpos;
 	arma::mat Jvel;

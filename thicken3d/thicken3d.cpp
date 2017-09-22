@@ -30,26 +30,29 @@ std::string IDENTIFIER = "test";
 
 // SDF parameters
 const size_t number_of_rays = 30;  // cast rays per facet
-const double cone_angle = CGAL_PI / 6.0; // set cone opening-angle
+const double cone_angle = CGAL_PI * 2.0 / 3.0; // set cone opening-angle
 std::default_random_engine re;
 
 double Td = 0.1;
 
-double K_S = 128.0;
-double K_D = 64.0;
-double ksdf_multiplier = 1.2;
+double K_S = 64.0;
+double K_D = 1024.0;
+double ksdf_multiplier = 1.0;
 double K_SDF = ksdf_multiplier * K_S * Td;
 
 double VERTEX_MASS = 1.0;
 double MASS_INV = 1.0 / VERTEX_MASS;
 
 double TIME_STEP = 1.0;
-double TOTAL_TIME = 50.0;
+double TOTAL_TIME = 100.0;
 size_t STEPS = (size_t)std::ceil(TOTAL_TIME / TIME_STEP);
+
+size_t N_BATCH = 4; // number of times SDF and spring-damper system is reset during iterations (including initial)
+size_t BATCH_SIZE = (size_t)std::ceil((double)STEPS / N_BATCH);
 
 // Global Variables
 std::pair<double, double> min_max_sdf;
-double nT1, nT2;
+double nTd;
 size_t nMove = 0;
 arma::vec max_change_vec(STEPS);
 
@@ -71,24 +74,49 @@ double unnormalize_diameter(
 	return diameter * (min_max_sdf.second - min_max_sdf.first) + min_max_sdf.first;
 }
 
-// set n_ring neighborhood to movable
-void setMovable(
+//// set n_ring neighborhood to movable
+//void setMovable(
+//	const Polyhedron& mesh,
+//	boost::associative_property_map<v_memo_map>& Vertex_memo_map,
+//	Polyhedron::Vertex_const_iterator vi,
+//	size_t n_ring
+//)
+//{
+//	Vertex_memo_map[vi].isMovable = true;
+//	if (n_ring <= 0) return;
+//
+//	Polyhedron::Halfedge_const_handle he1;
+//	Polyhedron::Halfedge_const_handle he2;
+//	he1 = vi->halfedge();
+//	he2 = he1;
+//	do
+//	{
+//		setMovable(mesh, Vertex_memo_map, he2->opposite()->vertex(), n_ring - 1);
+//		he2 = he2->next_on_vertex(); // loop over halfedges on the vertex
+//	} while (he2 != he1);
+//}
+
+// specifies n-ring neighbor of a vertex and computes decaying forces on them for smoothness
+void setSDFNeighbor(
 	const Polyhedron& mesh,
 	boost::associative_property_map<v_memo_map>& Vertex_memo_map,
 	Polyhedron::Vertex_const_iterator vi,
+	double force,
 	size_t n_ring
 )
 {
 	Vertex_memo_map[vi].isMovable = true;
+	Vertex_memo_map[vi].setMaxSDFMag(force);
 	if (n_ring <= 0) return;
 
+	double f = force / 1.2;
 	Polyhedron::Halfedge_const_handle he1;
 	Polyhedron::Halfedge_const_handle he2;
 	he1 = vi->halfedge();
 	he2 = he1;
 	do
 	{
-		setMovable(mesh, Vertex_memo_map, he2->opposite()->vertex(), n_ring - 1);
+		setSDFNeighbor(mesh, Vertex_memo_map, he2->opposite()->vertex(), f, n_ring - 1);
 		he2 = he2->next_on_vertex(); // loop over halfedges on the vertex
 	} while (he2 != he1);
 }
@@ -196,7 +224,7 @@ size_t populate_memos(
 	}
 
 	// normalize the threshold diameter based on min and max SDF values
-	nT1 = normalize_diameter(Td, min_max_sdf);
+	nTd = normalize_diameter(Td, min_max_sdf);
 
 	// compute face area
 	Facet_double_map fam;
@@ -248,14 +276,26 @@ size_t populate_memos(
 		Vertex_memo_map[vi].set_area_factor(v_area);
 		Vertex_memo_map[vi].set_ref_point(vi->point() - unnormalize_diameter(v_sdf, min_max_sdf)*vnormal_map[vi] / 2.0);
 
-		if (v_sdf <= nT1)
-			setMovable(mesh, Vertex_memo_map, vi, 3); // set 3-ring neighborhood vertices to movable
+		//if (v_sdf <= nTd)
+		//	setMovable(mesh, Vertex_memo_map, vi, 3); // set 3-ring neighborhood vertices to movable
 	}
 
 	area_avg /= mesh.size_of_vertices();
 	//std::cout << "Average area = " << area_avg << std::endl;
 
-	// compute vertex force and Jacobians after setting area factor
+	double force = 0.0;
+	// normalize area factor and set movable vertices
+	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
+	{
+		Vertex_memo_map[vi].set_area_factor(Vertex_memo_map[vi].get_area_factor() / area_avg); // use average face area to normalize area factor
+		if (Vertex_memo_map[vi].get_sdf() <= nTd)
+		{
+			force = K_SDF*Vertex_memo_map[vi].get_area_factor()*(1.0 - Vertex_memo_map[vi].get_sdf() / nTd);
+			setSDFNeighbor(mesh, Vertex_memo_map, vi, force, 3);
+		}
+	}
+
+	// compute vertex force and Jacobians after setting area factor and movable vertices
 	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
 	{
 		// index is zero if the vertex is fixed
@@ -263,8 +303,8 @@ size_t populate_memos(
 			Vertex_memo_map[vi].index = ++movable;
 		else
 			Vertex_memo_map[vi].index = 0;
-		Vertex_memo_map[vi].set_area_factor(Vertex_memo_map[vi].get_area_factor() / area_avg);
-		Vertex_memo_map[vi].compute_force(K_SDF, K_S, K_D, nT1);
+
+		Vertex_memo_map[vi].compute_force(K_SDF, K_S, K_D);
 	}
 
 	populate_halfedge_memos(mesh, Vertex_memo_map, Halfedge_memo_map);
@@ -466,7 +506,7 @@ void update(
 			Vertex_memo_map[vi].set_velocity(Vertex_memo_map[vi].get_velocity() + delta_VEL(arma::span(idx, idx + 2)));
 		}
 		Vertex_memo_map[vi].set_normal(normal_map[vi]);
-		Vertex_memo_map[vi].compute_force(K_SDF, K_S, K_D, nT1);
+		Vertex_memo_map[vi].compute_force(K_SDF, K_S, K_D);
 	}
 
 	for (Polyhedron::Halfedge_const_iterator hi = mesh.halfedges_begin(); hi != mesh.halfedges_end(); ++hi)
@@ -564,10 +604,10 @@ void print_usage()
 	std::cout << "\t-td:\tthreshold Td (default = 0.1)" << std::endl;
 	std::cout << "\t-ks:\tspring constant K_S (default = 64.0)" << std::endl;
 	std::cout << "\t-kd:\tdamper constant K_D (default = 1024.0)" << std::endl;
-	std::cout << "\t-ksdf:\tforce constant multiplier ksdf_multiplier (default = 1.2)" << std::endl;
+	std::cout << "\t-ksdf:\tforce constant multiplier ksdf_multiplier (default = 1.0)" << std::endl;
 	std::cout << "\t-vm:\tvertex mass VERTEX_MASS (default = 1.0)" << std::endl;
 	std::cout << "\t-ts:\tone time step TIME_STEP (default = 1.0)" << std::endl;
-	std::cout << "\t-t:\ttotal time TOTAL_TIME (default = 50.0)" << std::endl;
+	std::cout << "\t-t:\ttotal time TOTAL_TIME (default = 100.0)" << std::endl;
 	std::cout << "\t-h, -help:\tprint usage" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Running using default settings..." << std::endl;
@@ -613,6 +653,7 @@ int main(int argc, char *argv[])
 	K_SDF = ksdf_multiplier * K_S * Td;
 	MASS_INV = 1.0 / VERTEX_MASS;
 	STEPS = (size_t)std::ceil(TOTAL_TIME / TIME_STEP);
+	BATCH_SIZE = (size_t)std::ceil((double)STEPS / N_BATCH);
 	max_change_vec.set_size(STEPS);
 
 	// output filenames
@@ -637,35 +678,37 @@ int main(int argc, char *argv[])
 	v_memo_map vmm;
 	boost::associative_property_map<v_memo_map> Vertex_memo_map(vmm);
 
-	// populate memos - compute and store normals, sdf, forces, and Jacobians
-	std::cout << "Populating memos..." << std::endl;
-	nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, true); // nMove is the number of movable vertices
-	std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
+	arma::vec FORCE;
+	arma::sp_mat JPOS;
+	arma::sp_mat JVEL;
+	arma::vec VELOCITY;
+
+	// numerical time integration
+	max_change_vec.fill(0.0);
+	std::cout << "Performing numerical integration..." << std::endl;
+	for (size_t i = 0; i < STEPS; i++)
+	{
+		if (i % BATCH_SIZE == 0)
+		{
+			std::cout << "Step: " << i << ", Time: " << i*TIME_STEP << std::endl;
+			// populate memos - compute and store normals, sdf, forces, and Jacobians
+			std::cout << "Populating memos..." << std::endl;
+			nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, false); // nMove is the number of movable vertices
+			std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
+			std::cout << std::endl;
+
+			if (nMove == 0) break;
+		}
+		max_change_vec[i] = march_and_update(nMove, mesh, Vertex_memo_map, Halfedge_memo_map, FORCE, JPOS, JVEL, VELOCITY);
+	}
+	std::cout << "Integration completed!" << std::endl;
 	std::cout << std::endl;
 
-	if (STEPS > 0 && nMove > 0)
-	{
-		arma::vec FORCE;
-		arma::sp_mat JPOS;
-		arma::sp_mat JVEL;
-		arma::vec VELOCITY;
-
-		// numerical time integration
-		max_change_vec.fill(0.0);
-		std::cout << "Performing numerical integration..." << std::endl;
-		for (size_t i = 0; i < STEPS; i++)
-		{
-			max_change_vec[i] = march_and_update(nMove, mesh, Vertex_memo_map, Halfedge_memo_map, FORCE, JPOS, JVEL, VELOCITY);
-		}
-		std::cout << "Integration completed!" << std::endl;
-		std::cout << std::endl;
-
-		// populate memos - compute and store normals, sdf, forces, and Jacobians
-		std::cout << "Populating memos..." << std::endl;
-		nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, false); // nMove is the number of movable vertices
-		std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
-		std::cout << std::endl;
-	}
+	// populate memos - compute and store normals, sdf, forces, and Jacobians
+	std::cout << "Populating memos..." << std::endl;
+	nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, false); // nMove is the number of movable vertices
+	std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
+	std::cout << std::endl;
 
 	// write output mesh into a file
 	std::ofstream output(meshOutFile);
