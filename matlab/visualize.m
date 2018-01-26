@@ -5,7 +5,7 @@ clc
 addpath(genpath('../../../alecjacobson-gptoolbox-00c124c'));
 
 % inputFile = '../data/cactus/cactus';
-inputFile = '../data/part2_thins_uni/part2_thins_uni';
+% inputFile = '../data/part2_thins_uni/part2_thins_uni';
 % inputFile = '../data/part2_thins_uni/part2_thins_uni_f001';
 % inputFile = '../data/part2_thins_uni/part2_thins_uni_f001_f001';
 % inputFile = '../data/puzzlepart/puzzlepart_uni';
@@ -15,10 +15,12 @@ inputFile = '../data/part2_thins_uni/part2_thins_uni';
 % inputFile = '../data/chess/chess1';
 % inputFile = '../data/table/table';
 % inputFile = '../data/chair/chair4';
+% inputFile = '../data/batman/batman_5';
+inputFile = '../data/horse/horse2';
 
 [V, F] = readOFF([inputFile, '.off']);
 
-outputIdentifier = 'f001';
+outputIdentifier = '0000';
 filename = [inputFile, '_', outputIdentifier];
 
 [V, F] = readOFF([filename, '.off']);

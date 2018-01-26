@@ -52,6 +52,17 @@ tz = 0;
 
 V = V*roty(ty)*rotz(tz)*rotx(tx);
 
+%% horse
+inputFile = '../data/horse/horse2_f001';
+
+[V, F] = readOFF([inputFile, '.off']);
+
+tx = 0;
+ty = -30;
+tz = 0;
+
+V = V*roty(ty)*rotz(tz)*rotx(tx);
+
 %%
 
 
