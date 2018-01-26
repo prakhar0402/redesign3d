@@ -608,6 +608,7 @@ void print_usage()
 	std::cout << "\t-vm:\tvertex mass VERTEX_MASS (default = 1.0)" << std::endl;
 	std::cout << "\t-ts:\tone time step TIME_STEP (default = 1.0)" << std::endl;
 	std::cout << "\t-t:\ttotal time TOTAL_TIME (default = 100.0)" << std::endl;
+	std::cout << "\t-nb:\tnumber of batches N_BATCH (default = 4)" << std::endl;
 	std::cout << "\t-h, -help:\tprint usage" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Running using default settings..." << std::endl;
@@ -643,6 +644,8 @@ int main(int argc, char *argv[])
 				TIME_STEP = std::atof(argv[++i]);
 			if (flag == "-t")
 				TOTAL_TIME = std::atof(argv[++i]);
+			if (flag == "-nb")
+				N_BATCH = (size_t)std::atoi(argv[++i]);
 			if (flag == "-h" || flag == "-help")
 				print_usage();
 			++i;
