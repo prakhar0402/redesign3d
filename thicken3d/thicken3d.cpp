@@ -74,6 +74,7 @@ std::pair<double, double> min_max_sdf;
 double nTd;
 size_t nMove = 0;
 arma::vec max_change_vec(STEPS);
+double rho = 1.0; // fabricability
 
 // normalize between 0 and 1 based on min and max SDF values
 double normalize_diameter(
@@ -164,10 +165,10 @@ void populate_halfedge_memos(
 		// compute forces and Jacobians
 		do
 		{
-			if (Vertex_memo_map[vi].index > 0 && Halfedge_memo_map[he2].isMaster == 0) // perform computation for movable edges only
+			if (Vertex_memo_map[vi].index > 0 && Halfedge_memo_map[he2].isMaster == 0) // perform computation for movable master edges only
 			{
 				Halfedge_memo_map[he2].isMaster = 1; // set as master
-				Halfedge_memo_map[he2->opposite()].isMaster = -1; // set the opposite as slave
+				Halfedge_memo_map[he2->opposite()].isMaster = -1; // set the opposite as slave - avoids repeated computations
 				Halfedge_memo_map[he2].compute_force(K_S, K_D, Vertex_memo_map[vi].get_velocity(), Vertex_memo_map[he2->opposite()->vertex()].get_velocity());
 			}
 
@@ -248,13 +249,28 @@ size_t populate_memos(
 	// compute face area
 	Facet_double_map fam;
 	boost::associative_property_map<Facet_double_map> Facet_area_map(fam);
-	// loop over each face to compute face area
+	// loop over each face to compute face area and volume
 	double area = 1.0;
+	double vol = 0.0, numA = 0.0, denA = 0.0, numV = 0.0, denV = 0.0;
 	for (Polyhedron::Facet_const_iterator fi = mesh.facets_begin(); fi != mesh.facets_end(); ++fi)
 	{
 		area = Kernel::Compute_area_3()(fi->halfedge()->vertex()->point(), fi->halfedge()->next()->vertex()->point(), fi->halfedge()->opposite()->vertex()->point());
 		boost::put(Facet_area_map, fi, area);
+
+		vol = area*unnormalize_diameter(sdf_property_map[fi], min_max_sdf); // should be divided by 2 for radius, but later 2 is cancelled in ratio
+		if (sdf_property_map[fi] <= nTd)
+		{
+			numA += area;
+			numV += vol;
+		}
+		denA += area;
+		denV += vol;
 	}
+	// computes fabricability as fraction of estimated volume and area
+	//double wA = 0.5, wV = 0.5;
+	//rho = 1.0 - wA*(numA / denA) - wV*(numV / denV); // additive
+	double wA = 1.0, wV = 0.5;
+	rho = 1.0 - 0.5*pow((numA / denA), 1.0 / wA) - 0.5*pow((numV / denV), 1.0 / wV); // exponent
 
 	// loop over each vertex to initialize vertex memos
 	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
@@ -268,7 +284,7 @@ size_t populate_memos(
 	size_t movable = 0;
 	Polyhedron::Halfedge_const_handle he1;
 	Polyhedron::Halfedge_const_handle he2;
-	// loop over each vertex to comoute vertex sdf
+	// loop over each vertex to compute vertex sdf
 	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
 	{
 		he1 = vi->halfedge();
@@ -276,7 +292,7 @@ size_t populate_memos(
 		sdf_sum = 0.0;
 		count = 0;
 		v_area = 0.0;
-		// add sdf values from neighboring faces
+		// add sdf values from neighboring faces with projected area as weights
 		do
 		{
 			proj_area = Facet_area_map[he2->facet()] * std::abs(Kernel::Compute_scalar_product_3()(vnormal_map[vi], fnormal_map[he2->facet()]));
@@ -285,8 +301,7 @@ size_t populate_memos(
 			count++;
 			he2 = he2->next_on_vertex(); // loop over halfedges on the vertex
 		} while (he2 != he1);
-		// map vertex to average of neighboring face sdf values
-
+		// map vertex to weighted average of neighboring face sdf values
 		v_sdf = sdf_sum / v_area;
 		area_avg += v_area;
 
@@ -303,7 +318,7 @@ size_t populate_memos(
 	//std::cout << "Average area = " << area_avg << std::endl;
 
 	double force = 0.0;
-	// normalize area factor and set movable vertices
+	// normalize area factor and set movable vertices neighborhood
 	for (Polyhedron::Vertex_const_iterator vi = mesh.vertices_begin(); vi != mesh.vertices_end(); ++vi)
 	{
 		Vertex_memo_map[vi].set_area_factor(Vertex_memo_map[vi].get_area_factor() / area_avg); // use average face area to normalize area factor
@@ -718,6 +733,8 @@ int main(int argc, char *argv[])
 			nMove = populate_memos(mesh, Vertex_memo_map, Halfedge_memo_map, false); // nMove is the number of movable vertices
 			std::cout << "Populating completed!\nNumber of movable vertices = " << nMove << std::endl;
 			std::cout << std::endl;
+			std::cout << "Fabricability = " << rho << std::endl;
+			std::cout << std::endl;
 
 			if (nMove == 0) break;
 		}
@@ -739,6 +756,9 @@ int main(int argc, char *argv[])
 
 	// write other output values and parameters into a result file
 	generateOutput(outputFile, mesh, Vertex_memo_map);
+
+	std::cout << "Final Fabricability = " << rho << std::endl;
+	std::cout << std::endl;
 
 	return EXIT_SUCCESS;
 }

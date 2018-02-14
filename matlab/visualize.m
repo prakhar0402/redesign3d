@@ -11,16 +11,16 @@ addpath(genpath('../../../alecjacobson-gptoolbox-00c124c'));
 % inputFile = '../data/puzzlepart/puzzlepart_uni';
 % inputFile = '../data/fidgetflyer/fidgetflyer';
 % inputFile = '../data/horse/horse2';
-% inputFile = '../data/rabbit/rabbit';
+inputFile = '../data/rabbit/rabbit';
 % inputFile = '../data/chess/chess1';
 % inputFile = '../data/table/table';
 % inputFile = '../data/chair/chair4';
 % inputFile = '../data/batman/batman_5';
-inputFile = '../data/horse/horse2';
+% inputFile = '../data/horse/horse2';
 
 [V, F] = readOFF([inputFile, '.off']);
 
-outputIdentifier = '0000';
+outputIdentifier = 'f002';
 filename = [inputFile, '_', outputIdentifier];
 
 [V, F] = readOFF([filename, '.off']);
@@ -94,6 +94,7 @@ hold on
 
 figure
 plot(TIME_STEP:TIME_STEP:TIME_STEP*STEPS, max_change, 'LineWidth', 2)
+set(gca, 'FontSize', 16);
 xlabel('Time Steps', 'FontWeight', 'bold', 'FontSize', 20);
 ylabel({'Maxima of','Vertex Displacements'}, 'FontWeight', 'bold', 'FontSize', 20)
 axis square
